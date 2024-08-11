@@ -1,13 +1,12 @@
 # set global variables
-# Ruta local para almacenar el chromedriver.exe
 $localPath = "C:\Users\Usuario\JoseMaciasEmergiaTestPowerAutomate\Config\chromedriver"
-$chromeDriverPath = $localPath + "\chromedriver.exe"
+$chromeDriverZip = $localPath + "\chromedriver-win64.zip"
+$chromeDriverPath = $localPath + "\chromedriver-win64\chromedriver.exe"
 $url = "https://www.amazon.com/s?k=bol%C3%ADgrafos&__mk_es_US=%C3%85M%C3%85%C5%BD%C3%95%C3%91&crid=3G3W7D5IH3YHV&sprefix=bol%C3%ADgrafos%2Caps%2C61&ref=nb_sb_noss_1"
 $nugetPatthUrl = "https://www.nuget.org/packages/Selenium.WebDriver/#readme-body-tab"
 $nupgetPath = "C:\Users\Usuario\JoseMaciasEmergiaTestPowerAutomate\Config"
-# Ruta donde descomprimiste los archivos .dll
 $seleniumPath = $nupgetPath+"\SeleniumNupget\lib\netstandard2.0"
-
+$EndPoint = "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json"
 
 function InstallDependencies
 {
@@ -28,6 +27,8 @@ function InstallDependencies
  {
     param (
         [string]$localPath,
+        [string]$chromeDriverZip,
+        [string]$EndPoint,
         [string]$chromeDriverPath
     )
 
@@ -35,7 +36,9 @@ function InstallDependencies
     if (-not (Test-Path -Path $localPath)) {
         New-Item -ItemType Directory -Force -Path $localPath
     }
+    # Valida si ya existe crhomedriverzip
     if(-not(Test-Path -Path $chromeDriverPath)){
+        
         # Obtener la versión de Google Chrome
         $chromePath = "C:\Program Files\Google\Chrome\Application\chrome.exe"
         if (-not (Test-Path $chromePath)) {
@@ -44,80 +47,83 @@ function InstallDependencies
 
         if (Test-Path $chromePath) {
             $chromeVersion = (Get-Item $chromePath).VersionInfo.ProductVersion
-            $chromeVersionMajor = [int]$chromeVersion.Split('.')[0]
+            
             Write-Output "Versión de Google Chrome: $chromeVersion"
-
-            # Scraping para obtener las versiones disponibles de ChromeDriver
-            $chromeDriverVersionsPage = "https://developer.chrome.com/docs/chromedriver/downloads?hl=es-419"
-            $htmlContent = Invoke-WebRequest -Uri $chromeDriverVersionsPage
-            $html = $htmlContent.Content
-
-            # Usar HtmlAgilityPack para parsear el contenido HTML
-            [System.Reflection.Assembly]::LoadWithPartialName("HtmlAgilityPack") | Out-Null
-            $htmlDoc = New-Object HtmlAgilityPack.HtmlDocument
-            $htmlDoc.LoadHtml($html)
-
-            # Extraer todas las versiones disponibles de ChromeDriver
-            $versionNodes = $htmlDoc.DocumentNode.SelectNodes("//span[@class='devsite-nav-text']")
-            $availableVersions = @()
-            foreach ($node in $versionNodes) {
-                if ($node.InnerText -match "^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$") {
-                    $availableVersions += $node.InnerText
-                }
-            }
-
-            # Buscar la versión más cercana hacia arriba y hacia abajo
-            $nearestVersionAbove = $null
-            $nearestVersionBelow = $null
-
-            foreach ($version in $availableVersions) {
-                $versionMajor = [int]$version.Split('.')[0]
-                if ($versionMajor -ge $chromeVersionMajor) {
-                    $nearestVersionAbove = $version
-                    break
-                } elseif ($versionMajor -lt $chromeVersionMajor) {
-                    $nearestVersionBelow = $version
-                }
-            }
-
-            # Determinar la versión de ChromeDriver a descargar
-            $chromeDriverVersion = $nearestVersionAbove
-            if (-not $chromeDriverVersion) {
-                $chromeDriverVersion = $nearestVersionBelow
-            }
-
-            # Si no hay versión exacta o cercana, usar la última versión disponible
-            if (-not $chromeDriverVersion) {
-                $chromeDriverBaseURL = "https://chromedriver.storage.googleapis.com"
-                $chromeDriverVersionURL = "$chromeDriverBaseURL/LATEST_RELEASE"
-                $chromeDriverVersion = Invoke-RestMethod -Uri $chromeDriverVersionURL
-            }
-
-            Write-Output "Versión seleccionada de ChromeDriver: $chromeDriverVersion"
-
-            # Descargar ChromeDriver
-            $chromeDriverBaseURL = "https://chromedriver.storage.googleapis.com"
-            $chromeDriverZipURL = "$chromeDriverBaseURL/$chromeDriverVersion/chromedriver_win32.zip"
-            $chromeDriverZipPath = "$localPath\chromedriver.zip"
-            Invoke-WebRequest -Uri $chromeDriverZipURL -OutFile $chromeDriverZipPath
-            Write-Output "ChromeDriver descargado: $chromeDriverZipPath"
-
-            # Descomprimir el archivo ZIP
-            $shell = New-Object -ComObject shell.application
-            $zip = $shell.NameSpace($chromeDriverZipPath)
-            $destination = $shell.NameSpace($localPath)
-            $destination.CopyHere($zip.Items(), 0x10)
-
-            # Eliminar el archivo ZIP descargado
-            Remove-Item -Path $chromeDriverZipPath
-
-            Write-Output "ChromeDriver descomprimido y listo en $localPath"
-        } else {
-            Write-Output "Google Chrome no está instalado en la ubicación predeterminada."
         }
-    }else{
-        Write-Output "ChromeDriver ya está instalado en $chromeDriverPath"
+        
+        # Descargar el contenido json desde el enpoint
+        $jsonContent = invoke-webrequest -Uri $EndPoint
+
+        # Parser el contenido json
+        $parsedJson = ConvertFrom-Json $jsonContent.Content
+
+        # Obtener el objeto del canal "stable"
+        $stableChannel = $parsedJson.channels.Stable
+
+        # Obtener la versión de chrome estable
+        $chromeVersion = $stableChannel.version
+
+        # imprime la versión estable
+        Write-Output "Versión estable de Chrome: $chromeVersion"
+
+        # Obtener la lista de descargas de ChromeDriver en el canal estable
+        $chromeDriverDownloads = $stableChannel.downloads.chromedriver
+
+        # Filtrar por la plataforma "win64"
+        $chromeDriverPlatform = $chromeDriverDownloads | Where-Object { $_.platform -eq "win64" }
+
+        # Obtener la URL de descarga de ChromeDriver
+        $chromeDriverUrl = $chromeDriverPlatform.url
+
+        write-output "URL de descarga de ChromeDriver: $chromeDriverUrl"
+
+        # Espera 5 segundos
+        Start-Sleep -Seconds 5
+
+        # Descargar el archivo zip de ChromeDriver
+
+        #Invoke-WebRequest -Uri $chromeDriverUrl -OutFile $chromeDriverZip
+        Start-BitsTransfer -Source $chromeDriverUrl -Destination $chromeDriverZip
+
+        Write-Output "ChromeDriver descargado en $chromeDriverZip"
+
+        # Descomprimir el archivo zip
+        Expand-Archive -Path $chromeDriverZip -DestinationPath $localPath
+
+        Write-Output "ChromeDriver descomprimido en $localPath"
+
+
+
+        # Agregar la carpeta del controlador al PATH del sistema si existe el .zip
+        if (Test-Path $chromeDriverZip) {
+            
+            # Obtiene la variable PATH a nivel de usuario
+            $path = [System.Environment]::GetEnvironmentVariable("Path", [System.EnvironmentVariableTarget]::User)
+
+            # Verifica si la ruta no existe ya en el PATH
+            if ($path -notlike "*$localPath*") {
+                # Agrega la nueva ruta al PATH del usuario
+                [System.Environment]::SetEnvironmentVariable("Path", $path + ";$chromeDriverPath", [System.EnvironmentVariableTarget]::User)
+
+                Write-Output "Ruta del controlador de Chrome agregada al PATH del usuario"
+            } else {
+                Write-Output "La ruta ya existe en el PATH del usuario"
+            }
+
+        
+            
+            # Eliminar el archivo zip
+            Remove-Item -Path $chromeDriverZip
+
+            Write-Output "Archivo zip de ChromeDriver eliminado"
+        }else{
+            Write-Output " Sucedio alg´´un error durante la descarga o extracción del controlador de Chrome"
+        }
+    } else {
+        Write-Output "ChromeDriver ya está descargado en $chromeDriverZip"
     }
+
+   
  }
 
  function DownloadNupgetSeleniumDriver {
@@ -177,7 +183,7 @@ function InstallDependencies
 # Función para descargar el contenido HTML de una página
 function DownloadHtmlContent {
     param (
-        [string]$chromeDriverPath,
+        [string]$chromeDriverZip,
         [string]$url,
         [string]$seleniumPath,
         [string]$nupgetPath
@@ -192,7 +198,7 @@ function DownloadHtmlContent {
     $options.AddArgument("--start-maximized")
 
     # Iniciar el controlador del navegador
-    $service = [OpenQA.Selenium.Chrome.ChromeDriverService]::CreateDefaultService($chromeDriverPath)
+    $service = [OpenQA.Selenium.Chrome.ChromeDriverService]::CreateDefaultService($chromeDriverZip)
     $driver = New-Object OpenQA.Selenium.Chrome.ChromeDriver($service, $options)
 
     # Navegar a la URL deseada
@@ -215,10 +221,10 @@ function DownloadHtmlContent {
 }
 
 
- InstallDependencies
- DownloadChromeDriver  -localPath $localPath -chromeDriverPath $chromeDriverPath
+ #InstallDependencies
+ DownloadChromeDriver  -localPath $localPath -chromeDriverZip $chromeDriverZip -EndPoint $EndPoint -chromeDriverPath $chromeDriverPath
  #DownloadNupgetSeleniumDriver -nugetPatthUrl $nugetPatthUrl -nupgetPath $nupgetPath
- DownloadHtmlContent -chromeDriverPath $chromeDriverPath -url $url -seleniumPath $seleniumPath -nupgetPath $nupgetPath
+ #DownloadHtmlContent -chromeDriverZip $chromeDriverZip -url $url -seleniumPath $seleniumPath -nupgetPath $nupgetPath
 
  
 
