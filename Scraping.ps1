@@ -2,11 +2,12 @@
 $localPath = "C:\Users\Usuario\JoseMaciasEmergiaTestPowerAutomate\Config\chromedriver"
 $chromeDriverZip = $localPath + "\chromedriver-win64.zip"
 $chromeDriverPath = $localPath + "\chromedriver-win64\chromedriver.exe"
-$url = "https://www.amazon.com/s?k=bol%C3%ADgrafos&__mk_es_US=%C3%85M%C3%85%C5%BD%C3%95%C3%91&crid=3G3W7D5IH3YHV&sprefix=bol%C3%ADgrafos%2Caps%2C61&ref=nb_sb_noss_1"
+$url = "https://www.amazon.com/s?k=boligrafos&__mk_es_US=%C3%85M%C3%85%C5%BD%C3%95%C3%91&crid=1UTOTVYTN7JBH&sprefix=boligrafos%2Caps%2C800&ref=nb_sb_noss_2"
 $nugetPatthUrl = "https://www.nuget.org/packages/Selenium.WebDriver/#readme-body-tab"
-$nupgetPath = "C:\Users\Usuario\JoseMaciasEmergiaTestPowerAutomate\Config"
-$seleniumPath = $nupgetPath+"\SeleniumNupget\lib\netstandard2.0"
+$ConfigPath = "C:\Users\Usuario\JoseMaciasEmergiaTestPowerAutomate\Config"
+$seleniumPath = $ConfigPath+"\SeleniumNupget\lib\netstandard2.0"
 $EndPoint = "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json"
+$ChromeDriverPath = $localPath+"\chromedriver-win64"
 
 function InstallDependencies
 {
@@ -19,6 +20,8 @@ function InstallDependencies
         Install-Module PowerHTML -Scope CurrentUser -ErrorAction Stop
         Write-Host "Installing Selenium module"
         Install-Module -Name Selenium -Scope CurrentUser
+    }else{
+        Write-Host "PowerHTML and Selenium modules are already installed"
     }
 
     Import-Module -ErrorAction Stop PowerHTML
@@ -129,7 +132,7 @@ function InstallDependencies
  function DownloadNupgetSeleniumDriver {
     param (
         [string]$nugetPatthUrl,
-        [string]$nupgetPath
+        [string]$ConfigPath
     )
 
     # Descargar el archivo HTML de la URL de NuGet
@@ -148,7 +151,7 @@ function InstallDependencies
     Write-Output "Enlace de descarga de Selenium WebDriver: $downloadLink"
 
     # SeleniumNupget Path
-    $SeleniumNupgetFolder = $nupgetPath+"\SeleniumNupget"
+    $SeleniumNupgetFolder = $ConfigPath+"\SeleniumNupget"
 
     # Crea la carpeta SeleniumNupget si no existe
     if (-not (Test-Path -Path $SeleniumNupgetFolder)) {
@@ -185,46 +188,63 @@ function DownloadHtmlContent {
     param (
         [string]$chromeDriverZip,
         [string]$url,
-        [string]$seleniumPath,
-        [string]$nupgetPath
+        [string]$ChromeDriverPath,
+        [string]$ConfigPath
     )
-    # Configurar y usar Selenium WebDriver 
-    $webDriverPath = $seleniumPath+"\WebDriver.dll"
-    Add-Type -Path $webDriverPath
 
+    try {
+        # Crea ruta para guardar contenido html
+        $ConfigPath = $ConfigPath + "\HtmlContent.html"
 
-    # Configurar el controlador de Chrome
-    $options = New-Object OpenQA.Selenium.Chrome.ChromeOptions
-    $options.AddArgument("--start-maximized")
+        # Importar el módulo de Selenium
+        Import-Module Selenium
 
-    # Iniciar el controlador del navegador
-    $service = [OpenQA.Selenium.Chrome.ChromeDriverService]::CreateDefaultService($chromeDriverZip)
-    $driver = New-Object OpenQA.Selenium.Chrome.ChromeDriver($service, $options)
+        # Configurar el controlador de Chrome
+        $chromeOptions = New-Object OpenQA.Selenium.Chrome.ChromeOptions
+        $chromeOptions.AddArgument("--start-maximized")
 
-    # Navegar a la URL deseada
-    $driver.Navigate().GoToUrl($url)
+        # Iniciar el servicio de ChromeDriver
+        $chromeDriverService = [OpenQA.Selenium.Chrome.ChromeDriverService]::CreateDefaultService($ChromeDriverPath)
+        $chromeDriverService.Start()
 
-    # Esperar a que la página cargue completamente
-    Start-Sleep -Seconds 5  # Ajusta este tiempo según sea necesario
+        # Crear una instancia del navegador Chrome
+        $driver = New-Object OpenQA.Selenium.Chrome.ChromeDriver($chromeDriverService, $chromeOptions)
+        
 
-    # Obtener el contenido HTML de la página
-    $htmlContent = $driver.PageSource
+        # Navegar a la URL deseada
+        $driver.Navigate().GoToUrl($url)
 
-    # Guardar el contenido HTML en un archivo
-    $htmlFilePath = $nupgetPath
-    Set-Content -Path $htmlFilePath -Value $htmlContent
+        # Esperar a que la página cargue completamente
+        Start-Sleep -Seconds 5  # Ajusta este tiempo según sea necesario
 
-    # Cerrar el navegador
-    $driver.Quit()
+        # Obtener el contenido HTML de la página
+        $htmlContent = $driver.PageSource
 
-    Write-Output "Contenido HTML guardado en $htmlFilePath"
+        # Guardar el contenido HTML en un archivo
+        $htmlFilePath = $ConfigPath
+        Set-Content -Path $htmlFilePath -Value $htmlContent
+
+        # Cerrar el navegador
+        $driver.Quit()
+
+        Write-Output "Contenido HTML guardado en $htmlFilePath"
+
+        return $htmlFilePath
+    }
+    # catch error un ErrorMessage variable
+    catch {
+        $ErrorMessage = $_.Exception.Message
+        Write-Output "Error al descargar el contenido HTML: $ErrorMessage"
+        return @{
+            Error = $ErrorMessage
+        }
+    }
 }
 
-
- #InstallDependencies
+ InstallDependencies
  DownloadChromeDriver  -localPath $localPath -chromeDriverZip $chromeDriverZip -EndPoint $EndPoint -chromeDriverPath $chromeDriverPath
- #DownloadNupgetSeleniumDriver -nugetPatthUrl $nugetPatthUrl -nupgetPath $nupgetPath
- #DownloadHtmlContent -chromeDriverZip $chromeDriverZip -url $url -seleniumPath $seleniumPath -nupgetPath $nupgetPath
+ #DownloadNupgetSeleniumDriver -nugetPatthUrl $nugetPatthUrl -ConfigPath$ConfigPath $ConfigPath
+ DownloadHtmlContent -chromeDriverZip $chromeDriverZip -url $url -ChromeDriverPath $ChromeDriverPath -ConfigPath $ConfigPath
 
  
 
